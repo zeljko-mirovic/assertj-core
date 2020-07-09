@@ -12,8 +12,8 @@
  */
 package org.assertj.core.api;
 
-import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
+import static org.assertj.core.api.Assertions.as;
 import static org.assertj.core.api.BDDAssertions.and;
 import static org.assertj.core.api.BDDAssertions.then;
 import static org.assertj.core.api.BDDAssertions.thenExceptionOfType;
@@ -23,9 +23,13 @@ import static org.assertj.core.api.BDDAssertions.thenIllegalStateException;
 import static org.assertj.core.api.BDDAssertions.thenNullPointerException;
 import static org.assertj.core.api.BDDAssertions.thenObject;
 import static org.assertj.core.api.BDDAssertions.thenThrownBy;
+import static org.assertj.core.api.InstanceOfAssertFactories.INTEGER;
+import static org.assertj.core.api.InstanceOfAssertFactories.STRING;
+import static org.assertj.core.util.Lists.list;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
@@ -34,7 +38,15 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.Spliterator;
+import java.util.function.DoublePredicate;
+import java.util.function.IntPredicate;
+import java.util.function.LongPredicate;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 
 import org.junit.jupiter.api.Test;
@@ -102,6 +114,8 @@ public class BDDAssertions_then_Test {
     then(iterable).contains("1");
     then(iterable, StringAssert.class).first().startsWith("1");
     then(iterable, stringAssertFactory).first().startsWith("1");
+    then(iterable).first(as(STRING)).startsWith("1");
+    then(iterable).singleElement(as(STRING)).startsWith("1");
   }
 
   @Test
@@ -231,16 +245,23 @@ public class BDDAssertions_then_Test {
   }
 
   @Test
+  public void then_BigInteger() {
+    then(BigInteger.valueOf(4)).isEqualTo(4);
+  }
+
+  @Test
   public void then_int_array() {
     then(new int[] { 2, 3 }).isEqualTo(new int[] { 2, 3 });
   }
 
   @Test
   public void then_List() {
-    List<Integer> list = asList(5, 6);
+    List<Integer> list = list(5, 6);
     then(list).hasSize(2);
     then(list, IntegerAssert.class).first().isLessThan(10);
     then(list, integerAssertFactory).first().isLessThan(10);
+    then(list).first(as(INTEGER)).isEqualTo(5);
+    then(list(5)).singleElement(as(INTEGER)).isEqualTo(5);
   }
 
   @Test
@@ -282,6 +303,50 @@ public class BDDAssertions_then_Test {
   @Test
   public void then_URI() {
     then(URI.create("http://assertj.org")).hasNoPort();
+  }
+
+  @Test
+  public void then_Optional() {
+    then(Optional.of("foo")).hasValue("foo");
+  }
+
+  @Test
+  public void then_OptionalInt() {
+    then(OptionalInt.of(1)).hasValue(1);
+  }
+
+  @Test
+  public void then_OptionalDouble() {
+    then(OptionalDouble.of(1)).hasValue(1);
+  }
+
+  @Test
+  public void then_Predicate() {
+    Predicate<String> actual = String::isEmpty;
+    then(actual).accepts("");
+  }
+
+  @Test
+  public void then_IntPredicate() {
+    IntPredicate predicate = val -> val <= 2;
+    then(predicate).accepts(1);
+  }
+
+  @Test
+  public void then_LongPredicate() {
+    LongPredicate predicate = val -> val <= 2;
+    then(predicate).accepts(1);
+  }
+
+  @Test
+  public void then_DoublePredicate() {
+    DoublePredicate predicate = val -> val <= 2;
+    then(predicate).accepts(1);
+  }
+
+  @Test
+  public void then_OptionalLong() {
+    then(OptionalLong.of(1)).hasValue(1);
   }
 
   @Test

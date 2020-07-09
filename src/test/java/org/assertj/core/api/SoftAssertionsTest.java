@@ -13,7 +13,6 @@
 package org.assertj.core.api;
 
 import static java.lang.String.format;
-import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
 import static java.util.concurrent.CompletableFuture.completedFuture;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
@@ -52,6 +51,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.time.LocalTime;
 import java.time.OffsetTime;
+import java.time.Period;
 import java.time.ZoneOffset;
 import java.util.Collection;
 import java.util.Deque;
@@ -150,9 +150,9 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
     fred = new CartoonCharacter("Fred Flintstone");
     fred.getChildren().add(pebbles);
 
-    List<String> names = asList("Dave", "Jeff");
+    List<String> names = list("Dave", "Jeff");
     LinkedHashSet<String> jobs = newLinkedHashSet("Plumber", "Builder");
-    Iterable<String> cities = asList("Dover", "Boston", "Paris");
+    Iterable<String> cities = list("Dover", "Boston", "Paris");
     int[] ranks = { 1, 2, 3 };
 
     iterableMap = new LinkedHashMap<>();
@@ -323,12 +323,13 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
       softly.assertThat((DoublePredicate) s -> s == 1).accepts(2);
       softly.assertThat(URI.create("http://assertj.org:80").toURL()).hasNoPort();
       softly.assertThat(Duration.ofHours(10)).hasHours(5);
+      softly.assertThat(Period.ofDays(1)).hasDays(2);
 
       softly.assertAll();
       fail("Should not reach here");
     } catch (MultipleFailuresError e) {
       List<String> errors = e.getFailures().stream().map(Object::toString).collect(toList());
-      assertThat(errors).hasSize(54);
+      assertThat(errors).hasSize(55);
       assertThat(errors.get(0)).contains(format("%nExpecting:%n <0>%nto be equal to:%n <1>%nbut was not."));
       assertThat(errors.get(1)).contains(format("%nExpecting:%n <false>%nto be equal to:%n <true>%nbut was not."));
       assertThat(errors.get(2)).contains(format("%nExpecting:%n <false>%nto be equal to:%n <true>%nbut was not."));
@@ -429,6 +430,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
       assertThat(errors.get(53)).contains(format("%nExpecting Duration:%n"
                                                  + " <10H>%n"
                                                  + "to have 5L hours but had 10L"));
+      assertThat(errors.get(54)).contains(format("%nExpecting Period:%n <P1D>%nto have 2 days but had 1"));
     }
   }
 
@@ -463,7 +465,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_pass_when_using_extracting_with_list() {
     // GIVEN
-    List<Name> names = asList(Name.name("John", "Doe"), name("Jane", "Doe"));
+    List<Name> names = list(Name.name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .overridingErrorMessage("overridingErrorMessage with extracting(String)")
@@ -521,7 +523,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_pass_when_using_extracting_with_iterable() {
 
-    Iterable<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    Iterable<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
 
     try (AutoCloseableSoftAssertions softly = new AutoCloseableSoftAssertions()) {
       softly.assertThat(names)
@@ -634,7 +636,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_work_with_flat_extracting() {
     // GIVEN
-    List<CartoonCharacter> characters = asList(homer, fred);
+    List<CartoonCharacter> characters = list(homer, fred);
     CartoonCharacter[] charactersAsArray = characters.toArray(new CartoonCharacter[0]);
     // WHEN
     softly.assertThat(characters)
@@ -679,7 +681,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_collect_all_errors_when_using_extracting() {
     // GIVEN
-    List<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    List<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .overridingErrorMessage("error 1")
@@ -736,7 +738,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_collect_all_errors_when_using_flat_extracting() {
     // GIVEN
-    List<CartoonCharacter> characters = asList(homer, fred);
+    List<CartoonCharacter> characters = list(homer, fred);
     // WHEN
     softly.assertThat(characters)
           .overridingErrorMessage("error 1")
@@ -902,6 +904,10 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
     softly.assertThat(emptyList()).last();
     // the nested proxied call to isNotEmpty() throw an Assertion error that must be propagated to the caller.
     softly.assertThat(emptyList()).last(as(STRING));
+    // the nested proxied call to assertHasSize() throw an Assertion error that must be propagated to the caller.
+    softly.assertThat(emptyList()).singleElement();
+    // the nested proxied call to assertHasSize() throw an Assertion error that must be propagated to the caller.
+    softly.assertThat(emptyList()).singleElement(as(STRING));
     // nested proxied call to throwAssertionError when checking that is optional is present
     softly.assertThat(Optional.empty()).contains("Foo");
     // nested proxied call to isNotNull
@@ -915,7 +921,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
     // nested proxied call to isGreaterThan
     softly.assertThat(Duration.ofDays(-1)).isPositive();
     // it must be caught by softly.assertAll()
-    assertThat(softly.errorsCollected()).hasSize(12);
+    assertThat(softly.errorsCollected()).hasSize(14);
   }
 
   @Test
@@ -1043,7 +1049,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void iterable_soft_assertions_should_work_with_navigation_methods() {
     // GIVEN
-    Iterable<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    Iterable<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .as("size isGreaterThan(10)")
@@ -1106,7 +1112,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void list_soft_assertions_should_work_with_navigation_methods() {
     // GIVEN
-    List<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    List<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .as("size isGreaterThan(10)")
@@ -1166,13 +1172,65 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
     assertThat(errorsCollected.get(8)).hasMessage("[last element as Name] error message");
   }
 
+  @Test
+  public void iterable_soft_assertions_should_work_with_singleElement_navigation() {
+    // GIVEN
+    Iterable<Name> names = list(name("Jane", "Doe"));
+    // WHEN
+    softly.assertThat(names)
+          .as("single element")
+          .singleElement()
+          .isNotNull();
+    softly.assertThat(names)
+          .as("single element")
+          .overridingErrorMessage("error message")
+          .singleElement()
+          .isNull();
+    softly.assertThat(names)
+          .as("single element as Name")
+          .overridingErrorMessage("error message")
+          .singleElement(as(type(Name.class)))
+          .isNull();
+    // THEN
+    List<Throwable> errorsCollected = softly.errorsCollected();
+    assertThat(errorsCollected).hasSize(2);
+    assertThat(errorsCollected.get(0)).hasMessage("[single element] error message");
+    assertThat(errorsCollected.get(1)).hasMessage("[single element as Name] error message");
+  }
+
+  @Test
+  public void list_soft_assertions_should_work_with_singleElement_navigation() {
+    // GIVEN
+    List<Name> names = list(name("Jane", "Doe"));
+    // WHEN
+    softly.assertThat(names)
+          .as("single element")
+          .singleElement()
+          .isNotNull();
+    softly.assertThat(names)
+          .as("single element")
+          .overridingErrorMessage("error message")
+          .singleElement()
+          .isNull();
+    softly.assertThat(names)
+          .as("single element as Name")
+          .overridingErrorMessage("error message")
+          .singleElement(as(type(Name.class)))
+          .isNull();
+    // THEN
+    List<Throwable> errorsCollected = softly.errorsCollected();
+    assertThat(errorsCollected).hasSize(2);
+    assertThat(errorsCollected.get(0)).hasMessage("[single element] error message");
+    assertThat(errorsCollected.get(1)).hasMessage("[single element as Name] error message");
+  }
+
   // the test would fail if any method was not proxyable as the assertion error would not be softly caught
   @SuppressWarnings("unchecked")
   @Test
   public void iterable_soft_assertions_should_report_errors_on_final_methods_and_methods_that_switch_the_object_under_test() {
     // GIVEN
-    Iterable<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
-    Iterable<CartoonCharacter> characters = asList(homer, fred);
+    Iterable<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
+    Iterable<CartoonCharacter> characters = list(homer, fred);
     // WHEN
     softly.assertThat(names)
           .as("extracting(throwingFirstNameFunction)")
@@ -1355,8 +1413,8 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void list_soft_assertions_should_report_errors_on_final_methods_and_methods_that_switch_the_object_under_test() {
     // GIVEN
-    List<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
-    List<CartoonCharacter> characters = asList(homer, fred);
+    List<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
+    List<CartoonCharacter> characters = list(homer, fred);
     // WHEN
     softly.assertThat(names)
           .as("extracting(throwingFirstNameFunction)")
@@ -1721,7 +1779,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
     // GIVEN
     Name name = name("John", "Doe");
     Object alphabet = "abcdefghijklmnopqrstuvwxyz";
-    Object vowels = asList("a", "e", "i", "o", "u");
+    Object vowels = list("a", "e", "i", "o", "u");
     // WHEN
     softly.assertThat(name)
           .as("extracting(\"first\", \"last\")")
@@ -1986,7 +2044,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void soft_assertions_should_work_with_zipSatisfy() {
     // GIVEN
-    List<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    List<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .as("zipSatisfy")
@@ -2016,7 +2074,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_keep_representation_after_changing_the_object_under_test() {
     // GIVEN
-    List<Name> names = asList(name("John", "Doe"), name("Jane", "Doe"));
+    List<Name> names = list(name("John", "Doe"), name("Jane", "Doe"));
     // WHEN
     softly.assertThat(names)
           .as("unicode")
@@ -2033,7 +2091,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_keep_registered_comparators_after_changing_the_iterable_under_test() {
     // GIVEN
-    Iterable<Name> names = asList(name("Manu", "Ginobili"), name("Magic", "Johnson"));
+    Iterable<Name> names = list(name("Manu", "Ginobili"), name("Magic", "Johnson"));
     // WHEN
     softly.assertThat(names)
           .extracting(firstNameFunction)
@@ -2070,7 +2128,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   @Test
   public void should_keep_registered_comparators_after_changing_the_list_under_test() {
     // GIVEN
-    List<Name> names = asList(name("Manu", "Ginobili"), name("Magic", "Johnson"));
+    List<Name> names = list(name("Manu", "Ginobili"), name("Magic", "Johnson"));
     // WHEN
     softly.assertThat(names)
           .extracting(firstNameFunction)
@@ -2164,7 +2222,7 @@ public class SoftAssertionsTest extends BaseAssertionsTest {
   public void soft_assertions_should_work_with_assertThatObject() {
     // GIVEN
     TolkienCharacter legolas = TolkienCharacter.of("Legolas", 1000, ELF);
-    Deque<TolkienCharacter> characters = new LinkedList<>(asList(legolas));
+    Deque<TolkienCharacter> characters = new LinkedList<>(list(legolas));
     Consumer<Deque<TolkienCharacter>> isFirstHobbit = tolkienCharacters -> assertThat(tolkienCharacters.getFirst()
                                                                                                        .getRace()).isEqualTo(HOBBIT);
     Consumer<Deque<TolkienCharacter>> isFirstMan = tolkienCharacters -> assertThat(tolkienCharacters.getFirst()

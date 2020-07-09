@@ -34,10 +34,17 @@ public class ErrorCollector {
   private static final String INTERCEPT_METHOD_NAME = "intercept";
   private static final String CLASS_NAME = ErrorCollector.class.getName();
 
+  // The list is synchronized in case errors arrive from more than a single thread.
   // scope : the current softassertion object
-  private final List<AssertionError> errors = new ArrayList<>();
+  private final List<AssertionError> errors = Collections.synchronizedList(new ArrayList<>());
   // scope : the last assertion call (might be nested)
   private final LastResult lastResult = new LastResult();
+
+  private AfterAssertionErrorCollected afterAssertionErrorCollected;
+
+  void setAfterAssertionErrorCollected(AfterAssertionErrorCollected afterAssertionErrorCollected) {
+    this.afterAssertionErrorCollected = afterAssertionErrorCollected;
+  }
 
   /**
    * @param errorCollector the {@link ErrorCollector} to gather assertions error for the assertion instance
@@ -63,7 +70,7 @@ public class ErrorCollector {
         // let the most outer call handle the assertion error
         throw assertionError;
       }
-      collectAssertionError(assertionError, errorCollector);
+      errorCollector.addError(assertionError);
     }
     if (method != null && !method.getReturnType().isInstance(assertion)) {
       // In case the object is not an instance of the return type, just default value for the return type:
@@ -73,14 +80,12 @@ public class ErrorCollector {
     return assertion;
   }
 
-  protected static void collectAssertionError(AssertionError error, ErrorCollector errorCollector) {
-    errorCollector.lastResult.setSuccess(false);
-    errorCollector.errors.add(error);
-  }
-
-  public void addError(AssertionError error) {
+  void addError(AssertionError error) {
     errors.add(error);
-    lastResult.recordError();
+    lastResult.setSuccess(false);
+    if (afterAssertionErrorCollected != null) {
+      afterAssertionErrorCollected.onAssertionErrorCollected(error);
+    }
   }
 
   public List<AssertionError> errors() {
@@ -103,16 +108,13 @@ public class ErrorCollector {
   }
 
   private static class LastResult {
-    private boolean wasSuccess = true;
-    private boolean errorFound = false;
+    // Marking these fields as volatile doesn't ensure complete thread safety
+    // (mutual exclusion, race-free behaviour), but guarantees eventual visibility
+    private volatile boolean wasSuccess = true;
+    private volatile boolean errorFound = false;
 
     private boolean wasSuccess() {
       return wasSuccess;
-    }
-
-    private void recordError() {
-      errorFound = true;
-      wasSuccess = false;
     }
 
     private void setSuccess(boolean success) {
@@ -124,12 +126,10 @@ public class ErrorCollector {
       // ----- proxied isFalse() -> calls isEqualTo(false) which is proxied
       // ------- proxied isEqualTo(false) : catch AssertionError => last result success = false, back to outer call
       // ---- proxied isFalse() : no AssertionError caught => last result success = true
-      // The overall last result success should not be true as one of the nested calls was not a success.
       errorFound |= !success;
+      wasSuccess = success;
 
       if (resolvingOutermostErrorCollectorProxyNestedCall()) {
-        // we are resolving the last nested call (if any), we can set a relevant value for wasSuccess
-        wasSuccess = !errorFound;
         // need to reset errorFound for the next soft assertion
         errorFound = false;
       }

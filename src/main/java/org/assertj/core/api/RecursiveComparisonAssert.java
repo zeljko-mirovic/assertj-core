@@ -13,19 +13,17 @@
 package org.assertj.core.api;
 
 import static org.assertj.core.error.ShouldBeEqualByComparingFieldByFieldRecursively.shouldBeEqualByComparingFieldByFieldRecursively;
+import static org.assertj.core.error.ShouldNotBeEqualComparingFieldByFieldRecursively.shouldNotBeEqualComparingFieldByFieldRecursively;
 
 import java.util.Comparator;
-import java.util.Date;
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.OptionalInt;
 import java.util.OptionalLong;
-import java.util.stream.Stream;
 
 import org.assertj.core.api.recursive.comparison.ComparisonDifference;
-import org.assertj.core.api.recursive.comparison.FieldLocation;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonDifferenceCalculator;
 import org.assertj.core.internal.Failures;
@@ -57,7 +55,7 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    * This is typically useful when actual's {@code equals} was not overridden.
    * <p>
    * The comparison is <b>not symmetrical</b> since it is <b>limited to actual's fields</b>, the algorithm gather all actual's fields
-   * and then compare them to the corresponding expected's fields.
+   * and then compare them to the corresponding expected's fields.<br>
    * It is then possible for the expected object to have more fields than actual which is handy when comparing a base type to a subtype.
    * <p>
    * <strong>Strict/lenient recursive comparison</strong>
@@ -162,6 +160,61 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
                                                                                                                           differences,
                                                                                                                           recursiveComparisonConfiguration,
                                                                                                                           info.representation()));
+    return myself;
+  }
+
+  /**
+   * Asserts that actual object is not equal to the given object based on a recursive property/field by property/field comparison
+   * (including inherited ones).
+   * <p>
+   * This is typically useful when actual's {@code equals} was not overridden.
+   * <p>
+   * The comparison is <b>not symmetrical</b> since it is <b>limited to actual's fields</b>, the algorithm gather all
+   * actual's fields and then compare them to the corresponding expected's fields.<br>
+   * It is then possible for the expected object to have more fields than actual which is handy when comparing
+   * a base type to a subtype.
+   * <p>
+   * This method is based on {@link #isEqualTo(Object)}, you can check out more usages in that method.
+   * <p>
+   * Example
+   * <pre><code class='java'> // equals not overridden in TolkienCharacter
+   * TolkienCharacter frodo = new TolkienCharacter("Frodo", 33, HOBBIT);
+   * TolkienCharacter frodoClone = new TolkienCharacter("Frodo", 33, HOBBIT);
+   * TolkienCharacter youngFrodo = new TolkienCharacter("Frodo", 22, HOBBIT);
+   *
+   * // Pass as equals compares object references
+   * assertThat(frodo).isNotEqualTo(frodoClone);
+   *
+   * // Fail as frodo and frodoClone are equals when doing a field by field comparison.
+   * assertThat(frodo).usingRecursiveComparison()
+   *                  .isNotEqualTo(frodoClone);
+   *
+   * // Pass as one the age fields differ between frodo and youngFrodo.
+   * assertThat(frodo).usingRecursiveComparison()
+   *                  .isNotEqualTo(youngFrodo);</code></pre>
+   *
+   * @param other the object to compare {@code actual} to.
+   * @return {@code this} assertions object
+   * @throws AssertionError if the actual object and the given objects are both {@code null}.
+   * @throws AssertionError if the actual and the given objects are equals property/field by property/field recursively.
+   * @see #isEqualTo(Object)
+   * @since 3.17.0
+   */
+  @Override
+  public SELF isNotEqualTo(Object other) {
+    if (actual == other) throw objects.getFailures().failure(info,
+                                                             shouldNotBeEqualComparingFieldByFieldRecursively(actual, other,
+                                                                                                              recursiveComparisonConfiguration,
+                                                                                                              info.representation()));
+    if (other != null && actual != null) {
+      List<ComparisonDifference> differences = determineDifferencesWith(other);
+      if (differences.isEmpty())
+        throw objects.getFailures().failure(info,
+                                            shouldNotBeEqualComparingFieldByFieldRecursively(actual, other,
+                                                                                             recursiveComparisonConfiguration,
+                                                                                             info.representation()));
+    }
+    // either one of actual or other was null (but not both) or there were no differences
     return myself;
   }
 
@@ -451,11 +504,10 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
   }
 
   /**
-   * By default the recursive comparison uses overridden {@code equals} methods to compare fields,
-   * this method allows to  compare recursively all fields <b>except fields with java types</b> (at some point we need to compare something!).
+   * This method instructs the recursive comparison to compare recursively all fields including the one whose type have overridden equals,
+   * <b>except fields with java types</b> (at some point we need to compare something!).
    * <p>
-   * For the recursive comparison to use the overridden {@code equals} of a given type anyway (like {@link Date}) you can register
-   * a type comparator using {@link #withComparatorForType(Comparator, Class)}.
+   * Since 3.17.0 this is the default behavior for recursive comparisons, to revert to the previous behavior call {@link #usingOverriddenEquals()}.
    * <p>
    * Example:
    * <pre><code class='java'> public class Person {
@@ -489,15 +541,18 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    * sherlock2.home.address.street = "Butcher Street";
    * sherlock2.home.address.number = 221;
    *
-   * // assertion succeeds but that's not what we expected since the home.address.street fields differ
-   * // but the equals implementation in Address does not compare them.
+   * // Assertion succeeds because:
+   * // - overridden equals are used
+   * // - Address has overridden equals and does not compare street fields.
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .isEqualTo(sherlock2);
    *
-   * // to avoid the previous issue, we force a recursive comparison on the home.address field
-   * // now this assertion fails as we expect since the home.address.street fields differ
+   * // To avoid using Address overridden equals, don't call usingOverriddenEquals() or call ignoringAllOverriddenEquals()
+   * // (calling ignoringAllOverriddenEquals() is actually not required as this is the default behavior).
+   * // This assertion fails as it will compare home.address.street fields which differ
    * assertThat(sherlock).usingRecursiveComparison()
-   *                     .ignoringAllOverriddenEquals()
+   *                      //.ignoringAllOverriddenEquals() // not needed as this is the default
    *                     .isEqualTo(sherlock2);</code></pre>
    *
    * @return this {@link RecursiveComparisonAssert} to chain other methods.
@@ -508,8 +563,67 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
   }
 
   /**
-   * By default the recursive comparison uses overridden {@code equals} methods to compare fields,
-   * this method allows to force a recursive comparison for the given fields (it adds them to the already registered ones).
+   * By default the recursive comparison compare recursively all fields including the ones whose type have overridden equals
+   * <b>except fields with java types</b> (at some point we need to compare something!).
+   * <p>
+   * This method instructs the recursive comparison to use overridden equals.
+   * <p>
+   * Example:
+   * <pre><code class='java'> public class Person {
+   *   String name;
+   *   double height;
+   *   Home home = new Home();
+   * }
+   *
+   * public class Home {
+   *   Address address = new Address();
+   * }
+   *
+   * public static class Address {
+   *   int number;
+   *   String street;
+   *
+   *   // only compares number!
+   *   {@literal @}Override
+   *   public boolean equals(final Object other) {
+   *     if (!(other instanceof Address)) return false;
+   *     Address castOther = (Address) other;
+   *     return Objects.equals(number, castOther.number);
+   *   }
+   * }
+   *
+   * Person sherlock = new Person("Sherlock", 1.80);
+   * sherlock.home.address.street = "Baker Street";
+   * sherlock.home.address.number = 221;
+   *
+   * Person sherlock2 = new Person("Sherlock", 1.80);
+   * sherlock2.home.address.street = "Butcher Street";
+   * sherlock2.home.address.number = 221;
+   *
+   * // assertion succeeds because Address equals does not compare street fields.
+   * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
+   *                     .isEqualTo(sherlock2);
+   *
+   * // Assertion fails because:
+   * // - Address equals is not used.
+   * // - street fields are compared and differ.
+   * assertThat(sherlock).usingRecursiveComparison()
+   *                     .isEqualTo(sherlock2);</code></pre>
+   *
+   * @return this {@link RecursiveComparisonAssert} to chain other methods.
+   * @since 3.17.0
+   */
+  public SELF usingOverriddenEquals() {
+    recursiveComparisonConfiguration.useOverriddenEquals();
+    return myself;
+  }
+
+  /**
+   * In case you have instructed the recursive to use overridden {@code equals} with {@link #usingOverriddenEquals()},
+   * this method allows to ignore overridden {@code equals} for the given fields (it adds them to the already registered ones).
+   * <p>
+   * Since 3.17.0 all overridden {@code equals} so this method is only relevant if you have called {@link #usingOverriddenEquals()} before.
    * <p>
    * Nested fields can be specified by using dots like this: {@code home.address.street}
    * <p>
@@ -528,7 +642,7 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    *   int number;
    *   String street;
    *
-   *   // only compares number, ouch!
+   *   // only compares number
    *   {@literal @}Override
    *   public boolean equals(final Object other) {
    *     if (!(other instanceof Address)) return false;
@@ -545,14 +659,19 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    * sherlock2.home.address.street = "Butcher Street";
    * sherlock2.home.address.number = 221;
    *
-   * // assertion succeeds but that's not what we expected since the home.address.street fields differ
-   * // but the equals implementation in Address does not compare them.
+   * // Assertion succeeds because:
+   * // - overridden equals are used
+   * // - Address has overridden equals and does not compare street fields.
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .isEqualTo(sherlock2);
    *
-   * // to avoid the previous issue, we force a recursive comparison on the home.address field
-   * // now this assertion fails as we expect since the home.address.street fields differ
+   * // ignoringOverriddenEqualsForFields force a recursive comparison on the given field
+   * // Assertion fails because:
+   * // - Address equals is not used.
+   * // - street fields are compared and differ.
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .ignoringOverriddenEqualsForFields("home.address")
    *                     .isEqualTo(sherlock2);</code></pre>
    *
@@ -568,6 +687,8 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
   /**
    * By default the recursive comparison uses overridden {@code equals} methods to compare fields,
    * this method allows to force a recursive comparison for all fields of the given types (it adds them to the already registered ones).
+   * <p>
+   * Since 3.17.0 all overridden {@code equals} so this method is only relevant if you have called {@link #usingOverriddenEquals()} before.
    * <p>
    * Example:
    * <pre><code class='java'> public class Person {
@@ -601,14 +722,19 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    * sherlock2.home.address.street = "Butcher Street";
    * sherlock2.home.address.number = 221;
    *
-   * // assertion succeeds but that's not what we expected since the home.address.street fields differ
-   * // but the equals implementation in Address does not compare them.
+   * // Assertion succeeds because:
+   * // - overridden equals are used
+   * // - Address has overridden equals and does not compare street fields.
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .isEqualTo(sherlock2);
    *
-   * // to avoid the previous issue, we force a recursive comparison on the Address type
-   * // now this assertion fails as we expect since the home.address.street fields differ
+   * // ignoringOverriddenEqualsForTypes force a recursive comparison on the given types.
+   * // Assertion fails because:
+   * // - Address equals is not used.
+   * // - street fields are compared and differ.
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .ignoringOverriddenEqualsForTypes(Address.class)
    *                     .isEqualTo(sherlock2);</code></pre>
    *
@@ -622,8 +748,10 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
   }
 
   /**
-   * By default the recursive comparison uses overridden {@code equals} methods to compare fields,
+   * In case you have instructed the recursive to use overridden {@code equals} with {@link #usingOverriddenEquals()},
    * this method allows to force a recursive comparison for the fields matching the given regexes (it adds them to the already registered ones).
+   * <p>
+   * Since 3.17.0 all overridden {@code equals} so this method is only relevant if you have called {@link #usingOverriddenEquals()} before.
    * <p>
    * Nested fields can be specified by using dots like: {@code home\.address\.street} ({@code \} is used to escape
    * dots since they have a special meaning in regexes).
@@ -660,14 +788,15 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    * sherlock2.home.address.street = "Butcher Street";
    * sherlock2.home.address.number = 221;
    *
-   * // assertion succeeds but that's not what we expected since the home.address.street fields differ
-   * // but the equals implementation in Address does not compare them.
+   * // assertion succeeds because overridden equals are used and thus street fields are mot compared
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .isEqualTo(sherlock2);
    *
-   * // to avoid the previous issue, we force a recursive comparison on home and its fields
+   * // ignoringOverriddenEqualsForFields force a recursive comparison on the field matching the regex
    * // now this assertion fails as we expect since the home.address.street fields differ
    * assertThat(sherlock).usingRecursiveComparison()
+   *                     .usingOverriddenEquals()
    *                     .ignoringOverriddenEqualsForFieldsMatchingRegexes("home.*")
    *                     .isEqualTo(sherlock2);</code></pre>
    *
@@ -899,9 +1028,7 @@ public class RecursiveComparisonAssert<SELF extends RecursiveComparisonAssert<SE
    */
   @CheckReturnValue
   public SELF withComparatorForFields(Comparator<?> comparator, String... fieldLocations) {
-    Stream.of(fieldLocations)
-          .map(FieldLocation::new)
-          .forEach(fieldLocation -> recursiveComparisonConfiguration.registerComparatorForField(comparator, fieldLocation));
+    recursiveComparisonConfiguration.registerComparatorForFields(comparator, fieldLocations);
     return myself;
   }
 
